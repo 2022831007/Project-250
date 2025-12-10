@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>My Books — BookBazaar</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header>
+      <div class="brand">📚 BookBauddies</div>
+      <div
+        style="margin-left: auto; display: flex; gap: 8px; align-items: center"
+      >
+        <button onclick="window.location.href='index.html'" class="btn-ghost">
+          Home
+        </button>
+        <button id="logoutBtn" class="btn-ghost">Log Out</button>
+      </div>
+    </header>
+
+    <main style="padding: 20px">
+      <div class="card">
+        <h3>My Uploaded Books</h3>
+        <div
+          id="myBooksList"
+          style="
+            margin-top: 12px;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 12px;
+          "
+        ></div>
+      </div>
+    </main>
+
+    <script type="module">
+      import { auth, db } from "./firebase.js";
+      import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-auth.js";
+      import {
+        collection,
+        query,
+        where,
+        onSnapshot,
+      } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore.js";
+      import { deleteBookById } from "./script.js";
+
+      const myBooksList = document.getElementById("myBooksList");
+      document.getElementById("logoutBtn").onclick = async () => {
+        await auth.signOut();
+        window.location.href = "index.html";
+      };
+
+      onAuthStateChanged(auth, (user) => {
+        if (!user) {
+          alert("Please log in");
+          window.location.href = "index.html";
+          return;
+        }
+        const q = query(
+          collection(db, "books"),
+          where("sellerId", "==", user.uid)
+        );
+        onSnapshot(q, (snapshot) => {
+          myBooksList.innerHTML = "";
+          if (snapshot.empty) {
+            myBooksList.innerHTML =
+              '<div class="muted small">No books uploaded yet.</div>';
+            return;
+          }
+          snapshot.forEach((docSnap) => {
+            const p = { id: docSnap.id, ...docSnap.data() };
+            const d = document.createElement("div");
+            d.className = "card product";
+            d.innerHTML = `
+            <img src="${
+              p.imageURL ||
+              "https://m.media-amazon.com/images/I/71zIDc0j0OL.jpg"
+            }">
+            <div><b>${p.title}</b><br><span class="muted small">${
+              p.author || "Unknown"
+            }</span></div>
+            <div style="font-weight:700">TK ${p.price || 0}</div>
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <button class="btn-ghost" data-id="${
+                p.id
+              }" data-act="delete">Delete</button>
+            </div>`;
+            myBooksList.appendChild(d);
+          });
+        });
+      });
+
+      // delegate delete
+      myBooksList.addEventListener("click", async (e) => {
+        if (e.target.dataset.act === "delete") {
+          const id = e.target.dataset.id;
+          if (confirm("Delete this book?")) {
+            const ok = await deleteBookById(id);
+            if (ok) alert("Deleted");
+            else alert("Delete failed");
+          }
+        }
+      });
+    </script>
+  </body>
+</html>

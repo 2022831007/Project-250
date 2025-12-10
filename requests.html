@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Requests — BookBazaar</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header>
+      <div class="brand">📚 BookBazaar</div>
+      <div
+        style="margin-left: auto; display: flex; gap: 8px; align-items: center"
+      >
+        <button onclick="window.location.href='index.html'" class="btn-ghost">
+          Home
+        </button>
+        <button id="logoutBtn" class="btn-ghost">Log Out</button>
+      </div>
+    </header>
+
+    <main style="padding: 20px">
+      <div class="card">
+        <h3>Borrow Requests</h3>
+        <div
+          id="requestsList"
+          style="
+            margin-top: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+          "
+        ></div>
+      </div>
+    </main>
+
+    <script type="module">
+      import { auth, db } from "./firebase.js";
+      import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-auth.js";
+      import {
+        collection,
+        query,
+        where,
+        onSnapshot,
+        doc,
+        updateDoc,
+      } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore.js";
+
+      const requestsList = document.getElementById("requestsList");
+      document.getElementById("logoutBtn").onclick = async () => {
+        await auth.signOut();
+        window.location.href = "index.html";
+      };
+
+      onAuthStateChanged(auth, (user) => {
+        if (!user) {
+          alert("Please log in");
+          window.location.href = "index.html";
+          return;
+        }
+
+        // show all requests where ownerId == current user
+        const q = query(
+          collection(db, "requests"),
+          where("ownerId", "==", user.uid)
+        );
+        onSnapshot(q, (snapshot) => {
+          requestsList.innerHTML = "";
+          if (snapshot.empty) {
+            requestsList.innerHTML =
+              '<div class="muted small">No requests yet.</div>';
+            return;
+          }
+          snapshot.forEach((docSnap) => {
+            const r = { id: docSnap.id, ...docSnap.data() };
+            const div = document.createElement("div");
+            div.className = "card";
+            div.innerHTML = `
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div>
+                <b>${
+                  r.borrowerName || r.borrowerId
+                }</b> requested <span class="muted">${r.bookId}</span>
+                <div class="small muted">Status: ${r.status}</div>
+              </div>
+              <div style="display:flex;gap:8px">
+                <button class="btn-primary" data-id="${
+                  r.id
+                }" data-act="approve">Approve</button>
+                <button class="btn-ghost" data-id="${
+                  r.id
+                }" data-act="decline">Decline</button>
+              </div>
+            </div>
+          `;
+            requestsList.appendChild(div);
+          });
+        });
+      });
+
+      // delegate approve/decline
+      requestsList.addEventListener("click", async (e) => {
+        const act = e.target.dataset.act;
+        const id = e.target.dataset.id;
+        if (!act || !id) return;
+        if (act === "approve") {
+          if (confirm("Approve this request?")) {
+            await updateDoc(doc(db, "requests", id), { status: "approved" });
+            alert("Approved");
+          }
+        } else if (act === "decline") {
+          if (confirm("Decline this request?")) {
+            await updateDoc(doc(db, "requests", id), { status: "declined" });
+            alert("Declined");
+          }
+        }
+      });
+    </script>
+  </body>
+</html>

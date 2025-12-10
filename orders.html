@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>My Orders – BookBazaar</title>
+    <link rel="stylesheet" href="style.css" />
+    <style>
+      .order-card {
+        border: 1px solid #e4e7eb;
+        padding: 16px;
+        border-radius: 8px;
+        margin-bottom: 12px;
+      }
+      .order-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 12px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid #e4e7eb;
+      }
+      .order-items {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-top: 8px;
+      }
+      .order-item {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        padding: 8px;
+        background: #f9fafb;
+        border-radius: 6px;
+      }
+      .order-item img {
+        width: 60px;
+        height: 80px;
+        object-fit: cover;
+        border-radius: 4px;
+      }
+      .order-item-details {
+        flex: 1;
+      }
+      .status-badge {
+        padding: 4px 12px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .status-pending {
+        background: #fef3c7;
+        color: #92400e;
+      }
+      .status-completed {
+        background: #d1fae5;
+        color: #065f46;
+      }
+      .status-cancelled {
+        background: #fee2e2;
+        color: #991b1b;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="brand">📚 BookBazaar</div>
+      <div
+        style="margin-left: auto; display: flex; gap: 8px; align-items: center"
+      >
+        <button onclick="window.location.href='index.html'" class="btn-ghost">
+          Home
+        </button>
+        <button id="logoutBtn" class="btn-ghost">Log Out</button>
+      </div>
+    </header>
+
+    <main style="padding: 20px; max-width: 1200px; margin: 0 auto">
+      <div class="card">
+        <h3>My Orders</h3>
+        <div id="ordersList" style="margin-top: 16px"></div>
+      </div>
+    </main>
+
+    <script type="module">
+      import { auth, db } from "./firebase.js";
+      import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-auth.js";
+      import {
+        collection,
+        query,
+        where,
+        onSnapshot,
+        orderBy,
+      } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore.js";
+
+      const ordersList = document.getElementById("ordersList");
+
+      document.getElementById("logoutBtn").onclick = async () => {
+        await auth.signOut();
+        window.location.href = "index.html";
+      };
+
+      function escapeHtml(s) {
+        return s
+          ? String(s)
+              .replaceAll("&", "&amp;")
+              .replaceAll("<", "&lt;")
+              .replaceAll(">", "&gt;")
+          : "";
+      }
+
+      function formatDate(timestamp) {
+        if (!timestamp) return "N/A";
+        const date = timestamp.toDate();
+        return date.toLocaleDateString() + " " + date.toLocaleTimeString();
+      }
+
+      onAuthStateChanged(auth, (user) => {
+        if (!user) {
+          alert("Please log in");
+          window.location.href = "index.html";
+          return;
+        }
+
+        // Show all orders where buyerId == current user
+        const q = query(
+          collection(db, "orders"),
+          where("buyerId", "==", user.uid),
+          orderBy("createdAt", "desc")
+        );
+
+        onSnapshot(q, (snapshot) => {
+          ordersList.innerHTML = "";
+
+          if (snapshot.empty) {
+            ordersList.innerHTML =
+              '<div class="muted small">No orders yet. Start shopping!</div>';
+            return;
+          }
+
+          snapshot.forEach((docSnap) => {
+            const order = { id: docSnap.id, ...docSnap.data() };
+            const orderCard = document.createElement("div");
+            orderCard.className = "order-card";
+
+            let statusClass = "status-pending";
+            if (order.status === "completed") statusClass = "status-completed";
+            if (order.status === "cancelled") statusClass = "status-cancelled";
+
+            let itemsHtml = "";
+            if (order.items && order.items.length > 0) {
+              order.items.forEach((item) => {
+                itemsHtml += `
+                  <div class="order-item">
+                    <img src="${
+                      item.imageURL ||
+                      "https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=400&h=600&fit=crop"
+                    }" alt="${escapeHtml(item.bookTitle)}">
+                    <div class="order-item-details">
+                      <div><b>${escapeHtml(item.bookTitle)}</b></div>
+                      <div class="small muted">by ${escapeHtml(
+                        item.bookAuthor
+                      )}</div>
+                      <div class="small">Quantity: ${item.quantity} × TK ${
+                  item.price
+                }</div>
+                      <div class="small muted">Seller: ${escapeHtml(
+                        item.sellerName
+                      )}</div>
+                    </div>
+                    <div style="font-weight: 700;">TK ${
+                      item.quantity * item.price
+                    }</div>
+                  </div>
+                `;
+              });
+            }
+
+            orderCard.innerHTML = `
+              <div class="order-header">
+                <div>
+                  <div style="font-weight: 700;">Order #${order.id.substring(
+                    0,
+                    8
+                  )}</div>
+                  <div class="small muted">${formatDate(order.createdAt)}</div>
+                </div>
+                <span class="status-badge ${statusClass}">${order.status.toUpperCase()}</span>
+              </div>
+              
+              <div class="order-items">
+                ${itemsHtml}
+              </div>
+              
+              <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e4e7eb; display: flex; justify-content: space-between; align-items: center;">
+                <div class="small muted">Total Amount:</div>
+                <div style="font-weight: 700; font-size: 18px;">TK ${
+                  order.totalAmount || 0
+                }</div>
+              </div>
+            `;
+
+            ordersList.appendChild(orderCard);
+          });
+        });
+      });
+    </script>
+  </body>
+</html>
